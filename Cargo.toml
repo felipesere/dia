@@ -1,0 +1,9 @@
+[package]
+name = "dia"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+jiff = "0.2.15"
+owo-colors = "4.2.3"
