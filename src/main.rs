@@ -6,8 +6,15 @@ use jiff::{
 };
 use owo_colors::OwoColorize;
 
+#[derive(Clone)]
+enum QuarterMode {
+    Auto,
+    Specific(u8),
+}
+
 struct Args {
     month: Option<Month>,
+    quarter: Option<QuarterMode>,
 }
 
 enum Month {
@@ -51,59 +58,54 @@ fn args() -> OptionParser<Args> {
         .optional()
         .parse::<_, Option<Month>, anyhow::Error>(|raw: Option<String>| {
             if let Some(raw) = raw {
-                return match raw.to_lowercase().as_str() {
+                match raw.to_lowercase().as_str() {
                     // Short names (3 letters)
-                    "jan" => Ok(Some(Month::Jan)),
-                    "feb" => Ok(Some(Month::Feb)),
-                    "mar" => Ok(Some(Month::Mar)),
-                    "apr" => Ok(Some(Month::Apr)),
-                    "may" => Ok(Some(Month::May)),
-                    "jun" => Ok(Some(Month::Jun)),
-                    "jul" => Ok(Some(Month::Jul)),
-                    "aug" => Ok(Some(Month::Aug)),
-                    "sep" => Ok(Some(Month::Sep)),
-                    "oct" => Ok(Some(Month::Oct)),
-                    "nov" => Ok(Some(Month::Nov)),
-                    "dez" | "dec" => Ok(Some(Month::Dez)),
-
-                    // Full month names
-                    "january" => Ok(Some(Month::Jan)),
-                    "february" => Ok(Some(Month::Feb)),
-                    "march" => Ok(Some(Month::Mar)),
-                    "april" => Ok(Some(Month::Apr)),
-                    "june" => Ok(Some(Month::Jun)),
-                    "july" => Ok(Some(Month::Jul)),
-                    "august" => Ok(Some(Month::Aug)),
-                    "september" => Ok(Some(Month::Sep)),
-                    "october" => Ok(Some(Month::Oct)),
-                    "november" => Ok(Some(Month::Nov)),
-                    "december" => Ok(Some(Month::Dez)),
-
-                    // Month numbers
-                    "1" => Ok(Some(Month::Jan)),
-                    "2" => Ok(Some(Month::Feb)),
-                    "3" => Ok(Some(Month::Mar)),
-                    "4" => Ok(Some(Month::Apr)),
-                    "5" => Ok(Some(Month::May)),
-                    "6" => Ok(Some(Month::Jun)),
-                    "7" => Ok(Some(Month::Jul)),
-                    "8" => Ok(Some(Month::Aug)),
-                    "9" => Ok(Some(Month::Sep)),
-                    "10" => Ok(Some(Month::Oct)),
-                    "11" => Ok(Some(Month::Nov)),
-                    "12" => Ok(Some(Month::Dez)),
-
+                   "1" | "jan" | "january"  => Ok(Some(Month::Jan)),
+                   "2" | "feb" | "february" => Ok(Some(Month::Feb)),
+                   "3" | "mar" | "march"    => Ok(Some(Month::Mar)),
+                   "4" | "apr" | "april"    => Ok(Some(Month::Apr)),
+                   "5" | "may" => Ok(Some(Month::May)),
+                   "6" | "jun" | "june"      => Ok(Some(Month::Jun)),
+                   "7" | "jul" | "july"      => Ok(Some(Month::Jul)),
+                   "8" | "aug" | "august"    => Ok(Some(Month::Aug)),
+                   "9" | "sep" | "september" => Ok(Some(Month::Sep)),
+                   "10"| "oct" | "october"   => Ok(Some(Month::Oct)),
+                   "11"| "nov" | "november"  => Ok(Some(Month::Nov)),
+                   "12"| "dez" | "dec" | "december" => Ok(Some(Month::Dez)),
                     _ => Err(anyhow::anyhow!(
                         "Invalid month '{}'. Use month name (jan, january), abbreviation, or number (1-12)",
                         raw
                     )),
-                };
+                }
+            } else {
+                Ok(None)
             }
 
-            Ok(None)
         });
 
-    construct!(Args { month }).to_options()
+    let quarter_switch = short('q')
+        .long("quarter")
+        .help("Display the quarter containing the current/specified month")
+        .req_flag(QuarterMode::Auto);
+
+    let quarter_num = short('q')
+        .long("quarter")
+        .argument::<String>("NUM")
+        .parse::<_, QuarterMode, anyhow::Error>(|raw| {
+            let quarter = raw
+                .parse::<u8>()
+                .map_err(|_| anyhow::anyhow!("Quarter must be a number between 1 and 4"))?;
+
+            if (1..=4).contains(&quarter) {
+                Ok(QuarterMode::Specific(quarter))
+            } else {
+                Err(anyhow::anyhow!("Quarter must be between 1 and 4"))
+            }
+        });
+
+    let quarter = construct!([quarter_switch, quarter_num]).optional();
+
+    construct!(Args { month, quarter }).to_options()
 }
 
 fn main() -> Result<(), anyhow::Error> {
@@ -118,6 +120,23 @@ fn main() -> Result<(), anyhow::Error> {
         }
         None => Zoned::now(),
     };
+
+    match args.quarter {
+        Some(QuarterMode::Auto) => {
+            display_quarter_auto(requested_month)?;
+        }
+        Some(QuarterMode::Specific(quarter_num)) => {
+            display_quarter_by_number(requested_month.year(), quarter_num)?;
+        }
+        None => {
+            display_month(requested_month)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn display_month(requested_month: Zoned) -> Result<(), anyhow::Error> {
     let today = Zoned::now();
 
     let start = requested_month.first_of_month()?;
@@ -156,7 +175,8 @@ fn main() -> Result<(), anyhow::Error> {
 
         if current.date() == today.date() {
             print!("{:>3} ", day_of_month.blue());
-        } else if monday_of_week.date() <= current.date() && current.date() <= friday_of_week.date() {
+        } else if monday_of_week.date() <= current.date() && current.date() <= friday_of_week.date()
+        {
             print!("{:>3} ", day_of_month.yellow());
         } else {
             print!("{day_of_month:>3} ");
@@ -171,6 +191,46 @@ fn main() -> Result<(), anyhow::Error> {
     }
     println!();
 
+    Ok(())
+}
+
+fn display_quarter_auto(reference_month: Zoned) -> Result<(), anyhow::Error> {
+    // Determine which quarter the month belongs to
+    let month_ordinal = reference_month.month();
+    let quarter_num = match month_ordinal {
+        1 | 2 | 3 => 1,    // Q1: Jan, Feb, Mar
+        4 | 5 | 6 => 2,    // Q2: Apr, May, Jun
+        7 | 8 | 9 => 3,    // Q3: Jul, Aug, Sep
+        10 | 11 | 12 => 4, // Q4: Oct, Nov, Dec
+        _ => unreachable!(),
+    };
+
+    display_quarter_by_number(reference_month.year(), quarter_num)
+}
+
+fn display_quarter_by_number(year: i16, quarter_num: u8) -> Result<(), anyhow::Error> {
+    let quarter_start_month = match quarter_num {
+        1 => 1,  // Q1: Jan, Feb, Mar
+        2 => 4,  // Q2: Apr, May, Jun
+        3 => 7,  // Q3: Jul, Aug, Sep
+        4 => 10, // Q4: Oct, Nov, Dec
+        _ => unreachable!("quarter_num should be validated to be 1-4"),
+    };
+
+    // Create a date for the first month of the quarter
+    let quarter_start = date(year, quarter_start_month, 1)
+        .to_zoned(TimeZone::system())
+        .unwrap();
+
+    // Display the 3 months of the quarter
+    for offset in 0..3 {
+        let month = quarter_start.checked_add(offset.months())?;
+        display_month(month)?;
+
+        if offset < 2 {
+            println!();
+        }
+    }
     Ok(())
 }
 
