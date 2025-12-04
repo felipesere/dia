@@ -26,8 +26,11 @@ fn main() -> Result<(), anyhow::Error> {
     println!("{days_header}");
     let offset = start.weekday().to_monday_zero_offset();
 
-    let empty_space_of_previous_month = (0..offset).map(|_| "   ").collect::<Vec<_>>().join(" ");
-    print!("{empty_space_of_previous_month} ");
+    if offset > 0 {
+        let empty_space_of_previous_month =
+            (0..offset).map(|_| "   ").collect::<Vec<_>>().join(" ");
+        print!("{empty_space_of_previous_month} ");
+    }
 
     let (monday_of_week, friday_of_week) = monday_friday(&now);
 
