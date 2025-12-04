@@ -4,7 +4,7 @@ use jiff::{
     civil::{Weekday, date},
     tz::TimeZone,
 };
-use owo_colors::OwoColorize;
+use owo_colors::{OwoColorize, colors::css::Gray};
 
 #[derive(Clone)]
 enum QuarterMode {
@@ -191,6 +191,8 @@ fn display_month(requested_month: Zoned) -> Result<(), anyhow::Error> {
         } else if monday_of_week.date() <= current.date() && current.date() <= friday_of_week.date()
         {
             print!("{:>3} ", day_of_month.yellow());
+        } else if matches!(current.weekday(), Weekday::Saturday | Weekday::Sunday) {
+            print!("{:>3} ", day_of_month.fg::<Gray>());
         } else {
             print!("{day_of_month:>3} ");
         }
