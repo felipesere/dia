@@ -1,7 +1,7 @@
 use bpaf::{OptionParser, Parser, construct, short};
 use jiff::{
     ToSpan, Zoned,
-    civil::{Weekday, date},
+    civil::{Date, Weekday, date},
     tz::TimeZone,
 };
 use owo_colors::{OwoColorize, colors::css::Gray};
@@ -119,6 +119,49 @@ fn args() -> OptionParser<Args> {
 fn main() -> Result<(), anyhow::Error> {
     let args = args().run();
 
+    let bank_holidays: Vec<Date> = vec![
+        "2024-01-01".parse().unwrap(),
+        "2024-03-29".parse().unwrap(),
+        "2024-04-01".parse().unwrap(),
+        "2024-05-06".parse().unwrap(),
+        "2024-05-27".parse().unwrap(),
+        "2024-08-26".parse().unwrap(),
+        "2024-12-25".parse().unwrap(),
+        "2024-12-26".parse().unwrap(),
+        "2025-01-01".parse().unwrap(),
+        "2025-04-18".parse().unwrap(),
+        "2025-04-21".parse().unwrap(),
+        "2025-05-05".parse().unwrap(),
+        "2025-05-26".parse().unwrap(),
+        "2025-08-25".parse().unwrap(),
+        "2025-12-25".parse().unwrap(),
+        "2025-12-26".parse().unwrap(),
+        "2026-01-01".parse().unwrap(),
+        "2026-04-03".parse().unwrap(),
+        "2026-04-06".parse().unwrap(),
+        "2026-05-04".parse().unwrap(),
+        "2026-05-25".parse().unwrap(),
+        "2026-08-31".parse().unwrap(),
+        "2026-12-25".parse().unwrap(),
+        "2026-12-28".parse().unwrap(),
+        "2027-01-01".parse().unwrap(),
+        "2027-03-26".parse().unwrap(),
+        "2027-03-29".parse().unwrap(),
+        "2027-05-03".parse().unwrap(),
+        "2027-05-31".parse().unwrap(),
+        "2027-08-30".parse().unwrap(),
+        "2027-12-27".parse().unwrap(),
+        "2027-12-28".parse().unwrap(),
+        "2028-01-03".parse().unwrap(),
+        "2028-04-14".parse().unwrap(),
+        "2028-04-17".parse().unwrap(),
+        "2028-05-01".parse().unwrap(),
+        "2028-05-29".parse().unwrap(),
+        "2028-08-28".parse().unwrap(),
+        "2028-12-25".parse().unwrap(),
+        "2028-12-26".parse().unwrap(),
+    ];
+
     let requested_year = args.year.unwrap_or_else(|| Zoned::now().year());
 
     let requested_month = match args.month {
@@ -136,20 +179,20 @@ fn main() -> Result<(), anyhow::Error> {
 
     match args.quarter {
         Some(QuarterMode::Auto) => {
-            display_quarter_auto(requested_year, requested_month)?;
+            display_quarter_auto(requested_year, requested_month, &bank_holidays)?;
         }
         Some(QuarterMode::Specific(quarter_num)) => {
-            display_quarter_by_number(requested_year, quarter_num)?;
+            display_quarter_by_number(requested_year, quarter_num, &bank_holidays)?;
         }
         None => {
-            display_month(requested_month)?;
+            display_month(requested_month, &bank_holidays)?;
         }
     }
 
     Ok(())
 }
 
-fn display_month(requested_month: Zoned) -> Result<(), anyhow::Error> {
+fn display_month(requested_month: Zoned, bank_holidays: &[Date]) -> Result<(), anyhow::Error> {
     let today = Zoned::now();
 
     let start = requested_month.first_of_month()?;
@@ -193,6 +236,8 @@ fn display_month(requested_month: Zoned) -> Result<(), anyhow::Error> {
             print!("{:>3} ", day_of_month.yellow());
         } else if matches!(current.weekday(), Weekday::Saturday | Weekday::Sunday) {
             print!("{:>3} ", day_of_month.fg::<Gray>());
+        } else if bank_holidays.contains(&current.date()) {
+            print!("{:>3} ", day_of_month.red());
         } else {
             print!("{day_of_month:>3} ");
         }
@@ -209,7 +254,11 @@ fn display_month(requested_month: Zoned) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn display_quarter_auto(reference_year: i16, reference_month: Zoned) -> Result<(), anyhow::Error> {
+fn display_quarter_auto(
+    reference_year: i16,
+    reference_month: Zoned,
+    bank_holidays: &[Date],
+) -> Result<(), anyhow::Error> {
     // Determine which quarter the month belongs to
     let month_ordinal = reference_month.month();
     let quarter_num = match month_ordinal {
@@ -220,10 +269,14 @@ fn display_quarter_auto(reference_year: i16, reference_month: Zoned) -> Result<(
         _ => unreachable!(),
     };
 
-    display_quarter_by_number(reference_year, quarter_num)
+    display_quarter_by_number(reference_year, quarter_num, bank_holidays)
 }
 
-fn display_quarter_by_number(year: i16, quarter_num: u8) -> Result<(), anyhow::Error> {
+fn display_quarter_by_number(
+    year: i16,
+    quarter_num: u8,
+    bank_holidays: &[Date],
+) -> Result<(), anyhow::Error> {
     let quarter_start_month = match quarter_num {
         1 => 1,  // Q1: Jan, Feb, Mar
         2 => 4,  // Q2: Apr, May, Jun
@@ -240,7 +293,7 @@ fn display_quarter_by_number(year: i16, quarter_num: u8) -> Result<(), anyhow::E
     // Display the 3 months of the quarter
     for offset in 0..3 {
         let month = quarter_start.checked_add(offset.months())?;
-        display_month(month)?;
+        display_month(month, bank_holidays)?;
 
         if offset < 2 {
             println!();
