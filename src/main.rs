@@ -15,6 +15,7 @@ enum QuarterMode {
 struct Args {
     month: Option<Month>,
     quarter: Option<QuarterMode>,
+    year: Option<i16>,
 }
 
 enum Month {
@@ -105,28 +106,40 @@ fn args() -> OptionParser<Args> {
 
     let quarter = construct!([quarter_switch, quarter_num]).optional();
 
-    construct!(Args { month, quarter }).to_options()
+    let year = short('y').long("year").argument::<i16>("YEAR").optional();
+
+    construct!(Args {
+        month,
+        quarter,
+        year
+    })
+    .to_options()
 }
 
 fn main() -> Result<(), anyhow::Error> {
     let args = args().run();
 
+    let requested_year = args.year.unwrap_or_else(|| Zoned::now().year());
+
     let requested_month = match args.month {
         Some(month) => {
             let now = Zoned::now();
-            date(now.year(), month.ordinal(), now.day())
+            date(requested_year, month.ordinal(), now.day())
                 .to_zoned(TimeZone::system())
                 .unwrap()
         }
-        None => Zoned::now(),
+        None => {
+            let today = Zoned::now();
+            date(requested_year, today.month(), today.day()).to_zoned(today.time_zone().clone())?
+        }
     };
 
     match args.quarter {
         Some(QuarterMode::Auto) => {
-            display_quarter_auto(requested_month)?;
+            display_quarter_auto(requested_year, requested_month)?;
         }
         Some(QuarterMode::Specific(quarter_num)) => {
-            display_quarter_by_number(requested_month.year(), quarter_num)?;
+            display_quarter_by_number(requested_year, quarter_num)?;
         }
         None => {
             display_month(requested_month)?;
@@ -194,18 +207,18 @@ fn display_month(requested_month: Zoned) -> Result<(), anyhow::Error> {
     Ok(())
 }
 
-fn display_quarter_auto(reference_month: Zoned) -> Result<(), anyhow::Error> {
+fn display_quarter_auto(reference_year: i16, reference_month: Zoned) -> Result<(), anyhow::Error> {
     // Determine which quarter the month belongs to
     let month_ordinal = reference_month.month();
     let quarter_num = match month_ordinal {
-        1 | 2 | 3 => 1,    // Q1: Jan, Feb, Mar
-        4 | 5 | 6 => 2,    // Q2: Apr, May, Jun
-        7 | 8 | 9 => 3,    // Q3: Jul, Aug, Sep
-        10 | 11 | 12 => 4, // Q4: Oct, Nov, Dec
+        1..=3 => 1,   // Q1: Jan, Feb, Mar
+        4..=6 => 2,   // Q2: Apr, May, Jun
+        7..=9 => 3,   // Q3: Jul, Aug, Sep
+        10..=12 => 4, // Q4: Oct, Nov, Dec
         _ => unreachable!(),
     };
 
-    display_quarter_by_number(reference_month.year(), quarter_num)
+    display_quarter_by_number(reference_year, quarter_num)
 }
 
 fn display_quarter_by_number(year: i16, quarter_num: u8) -> Result<(), anyhow::Error> {
