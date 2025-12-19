@@ -85,55 +85,19 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - name: Make the Github release
+        uses: felipesere/actions/release@main
         with:
-          path: artifacts
+          owner: felipesere
+          application: dia
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate checksums
-        run: |
-          cd artifacts
-          for dir in */; do
-            cd "$dir"
-            sha256sum *.tar.gz >> ../../SHA256SUMS
-            cd ..
-          done
-          cd ..
-          cat SHA256SUMS
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Make the Homebrew Tap release
+        uses: felipesere/actions/update-homebrew@main
         with:
-          files: |
-            artifacts/*/*.tar.gz
-            SHA256SUMS
-          body: |
-            ## Installation
-
-            ### Homebrew (macOS and Linux)
-            ```bash
-            brew tap felipesere/tap
-            brew install dia
-            ```
-
-            ### Manual Installation
-            Download the appropriate binary for your system:
-            - **macOS (Apple Silicon)**: dia-macos-aarch64.tar.gz
-            - **macOS (Intel)**: dia-macos-x86_64.tar.gz
-            - **Linux (x86_64)**: dia-linux-x86_64.tar.gz
-            - **Linux (ARM64)**: dia-linux-aarch64.tar.gz
-
-            Extract and install:
-            ```bash
-            tar xzf dia-*.tar.gz
-            sudo mv dia /usr/local/bin/
-            ```
-
-            Verify checksums with SHA256SUMS file.
-          draft: false
-          prerelease: ${{ contains(github.ref, 'pre') || contains(github.ref, 'rc') || contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          owner: felipesere
+          application: dia
+          formula: Dia
+          application_token: ${{ secrets.GITHUB_TOKEN }}
+          homebrew_tap: felipesere/homebrew-tap
+          homebrew_tap_token: ${{ secrets.COMMITTER_TOKEN }}
